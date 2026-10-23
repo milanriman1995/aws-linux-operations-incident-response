@@ -3,7 +3,9 @@
 
 # Project 1: Linux Server Health Check
 
-set -u
+set -euo pipefail
+
+DISK_THRESHOLD=80
 
 echo "================================="
 echo " Linux Server Health Check"
@@ -21,6 +23,20 @@ echo
 echo "[3] Root Filesystem Usage"
 df -h /
 
+disk_usage=$(df -P / | awk 'NR==2 {gsub(/%/, "", $5); print $5}')
+
+if [[ ! "$disk_usage" =~ ^[0-9]+$ ]]; then
+    echo "ERROR: Could not determine disk utilisation."
+    exit 2
+fi
+
+if (( disk_usage >= DISK_THRESHOLD )); then
+    echo "WARNING: Disk utilisation is ${disk_usage}%"
+    exit 1
+else
+    echo "Disk utilisation is healthy: ${disk_usage}%"
+fi
+
 echo
 echo "[4] SSM Agent Status"
 
@@ -32,5 +48,4 @@ else
 fi
 
 echo
-echo "Health check completed."
-
+echo "Health check completed successfully."
