@@ -1,0 +1,34 @@
+
+name: Linux Health Check CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Validate and Test Bash Scripts
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Validate Bash syntax
+        run: |
+          bash -n scripts/server-health-check.sh
+          bash -n tests/test-server-health-check.sh
+
+      - name: Run automated tests
+        run: bash tests/test-server-health-check.sh
+
