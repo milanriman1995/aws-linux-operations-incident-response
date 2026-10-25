@@ -1,0 +1,13 @@
+
+[Unit]
+Description=Run Project 1 Health Check Every Five Minutes
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=5min
+AccuracySec=1s
+Unit=server-health-check.service
+
+[Install]
+WantedBy=timers.target
+

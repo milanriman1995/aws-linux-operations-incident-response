@@ -1,0 +1,12 @@
+
+[Unit]
+Description=Project 1 Linux Server Health Check
+After=multi-user.target
+
+[Service]
+Type=oneshot
+User=ssm-user
+ExecStart=/usr/bin/bash /home/ssm-user/project1/scripts/server-health-check.sh
+StandardOutput=journal
+StandardError=journal
+
