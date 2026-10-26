@@ -1,6 +1,6 @@
 
 schemaVersion: '2.2'
-description: Deploy a pinned version of the Project 1 Linux health check
+description: Deploy and verify a pinned Project 1 health-check script
 
 parameters:
   CommitSha:
@@ -24,29 +24,38 @@ mainSteps:
           set -euo pipefail
 
           : "${SSM_CommitSha:?Missing commit SHA}"
-
-          [[ "$SSM_CommitSha" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          [[ "$SSM_CommitSha" =~ ^[0-9a-f]{40}$ ]]
 
           target="/home/ssm-user/project1/scripts/server-health-check.sh"
           backup="${target}.previous"
-          candidate=$(mktemp "${target}.new.XXXXXX")
-          installed=false
+          candidate=""
+          replacement_started=false
 
-          cleanup() {
+          rollback() {
             result=$?
-            if [ "$result" -ne 0 ] && [ "$installed" = true ]; then
-              if [ -f "$backup" ]; then
-                cp -p "$backup" "$target"
-                echo "Previous version restored"
-              fi
+            trap - EXIT
+
+            if [ "$result" -ne 0 ] &&
+               [ "$replacement_started" = true ]; then
+              echo "Deployment failed. Restoring previous version."
+              cp -p "$backup" "$target" ||
+                echo "ERROR: Automatic rollback failed!"
             fi
-            rm -f "$candidate"
+
+            if [ -n "$candidate" ]; then
+              rm -f -- "$candidate"
+            fi
+
+            exit "$result"
           }
-          trap cleanup EXIT
+
+          trap rollback EXIT
+
+          test -f "$target"
+
+          candidate=$(mktemp "${target}.new.XXXXXX")
 
           url="https://raw.githubusercontent.com/milanriman1995/aws-linux-operations-incident-response/${SSM_CommitSha}/scripts/server-health-check.sh"
-
-          echo "Downloading revision: $SSM_CommitSha"
 
           curl --fail --location --silent --show-error \
             --retry 2 \
@@ -57,18 +66,15 @@ mainSteps:
           test -s "$candidate"
           bash -n "$candidate"
 
-          if [ -f "$target" ]; then
-            cp -p "$target" "$backup"
-            chown --reference="$target" "$candidate"
-          else
-            chown ssm-user:ssm-user "$candidate"
-          fi
+          cp -p "$target" "$backup"
+          chown --reference="$target" "$candidate"
+          chmod --reference="$target" "$candidate"
 
-          chmod 755 "$candidate"
+          replacement_started=true
           mv -f "$candidate" "$target"
-          installed=true
 
-          bash "$target"
+          runuser -u ssm-user -- bash "$target"
 
-          echo "Deployment verified: $SSM_CommitSha"
+          replacement_started=false
+          echo "Deployment successful: $SSM_CommitSha"
 
