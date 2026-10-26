@@ -73,7 +73,7 @@ mainSteps:
           replacement_started=true
           mv -f "$candidate" "$target"
 
-          runuser -u ssm-user -- bash "$target"
+          runuser -u ssm-user -- bash "$target" || exit $?
 
           replacement_started=false
           echo "Deployment successful: $SSM_CommitSha"
