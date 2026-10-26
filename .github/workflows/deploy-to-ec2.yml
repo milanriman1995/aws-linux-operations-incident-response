@@ -20,7 +20,7 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - name: Checkout approved commit
+      - name: Checkout deployment commit
         uses: actions/checkout@v5
         with:
           persist-credentials: false
@@ -54,7 +54,7 @@ jobs:
 
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "$INSTANCE_ID" \
-            --document-name "project1-deploy-health-check" \
+            --document-name "project1-deploy-health-check-v2" \
             --document-version "1" \
             --parameters "CommitSha=$COMMIT_SHA" \
             --comment "Project 1 GitHub deployment" \
@@ -69,10 +69,12 @@ jobs:
             echo "Remote command completed"
           else
             echo "Remote deployment failed or timed out"
+
             aws ssm get-command-invocation \
               --command-id "$COMMAND_ID" \
               --instance-id "$INSTANCE_ID" \
               --output json || true
+
             exit 1
           fi
 
