@@ -55,7 +55,7 @@ jobs:
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "$INSTANCE_ID" \
             --document-name "project1-deploy-health-check-v2" \
-            --document-version "1" \
+            --document-version "2" \
             --parameters "CommitSha=$COMMIT_SHA" \
             --comment "Project 1 GitHub deployment" \
             --query "Command.CommandId" \
