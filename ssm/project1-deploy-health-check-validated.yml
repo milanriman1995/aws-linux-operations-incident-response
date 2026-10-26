@@ -1,0 +1,127 @@
+
+schemaVersion: '2.2'
+description: Deploy Project 1 health check with isolated rollback testing
+
+parameters:
+  CommitSha:
+    type: String
+    description: Full Git commit SHA
+    interpolationType: ENV_VAR
+    allowedPattern: '^[0-9a-f]{40}$'
+
+  DeploymentMode:
+    type: String
+    description: Normal deployment or safe rollback test
+    interpolationType: ENV_VAR
+    allowedValues:
+      - production
+      - rollback-test
+    default: production
+
+mainSteps:
+  - action: aws:runShellScript
+    name: deployHealthCheck
+    precondition:
+      StringEquals:
+        - platformType
+        - Linux
+    inputs:
+      timeoutSeconds: '120'
+      runCommand:
+        - |
+          #!/bin/bash
+          set -euo pipefail
+
+          : "${SSM_CommitSha:?Missing commit SHA}"
+          : "${SSM_DeploymentMode:?Missing deployment mode}"
+
+          [[ "$SSM_CommitSha" =~ ^[0-9a-f]{40}$ ]] || exit 1
+
+          live="/home/ssm-user/project1/scripts/server-health-check.sh"
+          test_dir=""
+          candidate=""
+          replacement_started=false
+
+          case "$SSM_DeploymentMode" in
+            production)
+              target="$live"
+              ;;
+            rollback-test)
+              test_dir=$(mktemp -d /tmp/project1-rollback.XXXXXX)
+              target="$test_dir/server-health-check.sh"
+              cp -p "$live" "$target"
+              ;;
+            *)
+              echo "Invalid deployment mode"
+              exit 1
+              ;;
+          esac
+
+          backup="${target}.previous"
+
+          cleanup() {
+            result=$?
+            trap - EXIT
+
+            if [ "$result" -ne 0 ] &&
+               [ "$replacement_started" = true ]; then
+              echo "Deployment failed. Restoring previous version."
+
+              if cp -p "$backup" "$target"; then
+                echo "ROLLBACK: previous version restored"
+
+                if cmp -s "$backup" "$target"; then
+                  echo "PASS: restored file matches backup"
+                else
+                  echo "FAIL: restored file differs from backup"
+                  result=1
+                fi
+              else
+                echo "FAIL: rollback restoration failed"
+                result=1
+              fi
+            fi
+
+            if [ -n "$candidate" ]; then
+              rm -f -- "$candidate"
+            fi
+
+            if [ -n "$test_dir" ]; then
+              rm -rf -- "$test_dir"
+            fi
+
+            exit "$result"
+          }
+
+          trap cleanup EXIT
+
+          candidate=$(mktemp "${target}.new.XXXXXX")
+
+          url="https://raw.githubusercontent.com/milanriman1995/aws-linux-operations-incident-response/${SSM_CommitSha}/scripts/server-health-check.sh"
+
+          curl --fail --location --silent --show-error \
+            --retry 2 \
+            --proto '=https' \
+            --proto-redir '=https' \
+            --output "$candidate" "$url"
+
+          test -s "$candidate"
+          bash -n "$candidate"
+
+          cp -p "$target" "$backup"
+          chown --reference="$target" "$candidate"
+          chmod --reference="$target" "$candidate"
+
+          replacement_started=true
+          mv -f "$candidate" "$target"
+
+          if [ "$SSM_DeploymentMode" = rollback-test ]; then
+            echo "INJECTED FAILURE: after script replacement"
+            exit 42
+          fi
+
+          runuser -u ssm-user -- bash "$target" || exit $?
+
+          replacement_started=false
+          echo "Deployment successful: $SSM_CommitSha"
+
