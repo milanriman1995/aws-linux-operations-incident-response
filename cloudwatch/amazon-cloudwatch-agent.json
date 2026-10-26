@@ -1,0 +1,50 @@
+
+{
+  "agent": {
+    "metrics_collection_interval": 60
+  },
+  "metrics": {
+    "namespace": "Project1/LinuxOperations",
+    "append_dimensions": {
+      "InstanceId": "${aws:InstanceId}"
+    },
+    "metrics_collected": {
+      "cpu": {
+        "measurement": [
+          "usage_active"
+        ],
+        "totalcpu": true
+      },
+      "mem": {
+        "measurement": [
+          "mem_used_percent"
+        ]
+      },
+      "disk": {
+        "measurement": [
+          "used_percent"
+        ],
+        "resources": [
+          "/"
+        ]
+      }
+    }
+  },
+  "logs": {
+    "logs_collected": {
+      "journald": {
+        "collect_list": [
+          {
+            "log_group_name": "/project1/linux/health-check",
+            "log_stream_name": "{instance_id}",
+            "units": [
+              "server-health-check.service"
+            ],
+            "retention_in_days": 7
+          }
+        ]
+      }
+    }
+  }
+}
+
